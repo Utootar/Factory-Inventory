@@ -1,14 +1,15 @@
 import tkinter as tk
 from tkinter import messagebox
 import pymysql
-
+from tkinter import ttk
+from PIL import Image, ImageTk
 
 def get_connection():
     return pymysql.connect(
-        host='Your server',
+        host='Your Server',
         user='Your Username',
-        password='Your password',
-        db='your database' 
+        password='Yout password',
+        db='Your Database' 
     )
 
 def add_product():
@@ -17,6 +18,7 @@ def add_product():
     price = entry_price.get().strip()
     cat = selected_category.get()
     if name == "" or qty == "" or price ==""or cat == "Select Category":
+        
         messagebox.showwarning("Warning", "Please complete all required fields!!")
         return
     
@@ -31,9 +33,10 @@ def add_product():
                 unit_price = VALUES(unit_price),
                 category = VALUES(category) 
             """
-            cursor.execute(sql, (name.title(), int(qty), int(price), cat))
+            cursor.execute(sql, (name.title(), int(qty), float(price), cat))
         conn.commit()
         conn.close()
+        load_data()
         messagebox.showinfo("Success", f"เพิ่ม {name} Add in Inventory")
         entry_name.delete(0, tk.END)
         entry_qty.delete(0, tk.END)
@@ -42,38 +45,179 @@ def add_product():
     except Exception as e:
         messagebox.showerror("Error", f"Cannot Connect: {e}")
 
+def show_summary():
+    try:
+        conn = get_connection()
+        with conn.cursor() as cursor:
+            
+            sql = """
+            SELECT 
+                COUNT(*) as total_items, 
+                SUM(quantity * unit_price) as total_value 
+            FROM inventory
+            """
+            cursor.execute(sql)
+            result = cursor.fetchone() 
+            
+            total_items = result[0] or 0
+            total_value = result[1] or 0
+            
+            # โชว์ Dashboard แบบสรุปผล
+            summary_text = (
+                f"📊 สรุปข้อมูลในคลัง:\n\n"
+                f"🔹 จำนวนรายการสินค้าทั้งหมด: {total_items} รายการ\n"
+                f"💰 มูลค่าสินค้ารวมทั้งคลัง: {total_value:,.2f} บาท"
+            )
+            messagebox.showinfo("Inventory Dashboard", summary_text)
+            
+        conn.close()
+    except Exception as e:
+        messagebox.showerror("Error", f"ไม่สามารถดึงข้อมูลได้: {e}")
+
+def load_data():
+    for i in tree.get_children():
+        tree.delete(i)
+    
+    try:
+        conn = get_connection()
+        with conn.cursor() as cursor:
+            cursor.execute("SELECT product_id, product_name, quantity, unit_price, category FROM Inventory")
+            rows = cursor.fetchall()
+            print(f"DEBUG: ดึงข้อมูลมาได้ทั้งหมด {len(rows)} แถว") # <--- เติมบรรทัดนี้
+            for row in rows:
+                print(f"DEBUG: กำลังใส่ข้อมูล -> {row}") # <--- เติมบรรทัดนี้
+                tree.insert("", tk.END, values=row)
+        conn.close()
+    except Exception as e:
+        messagebox.showerror("Debug Error", f"เกิดปัญหาตอนโหลดข้อมูล: {e}") # <--- เปลี่ยนจาก print เป็น messagebox
+
+def delete_product():
+    selected_item = tree.selection()
+    if not selected_item:
+        messagebox.showwarning("Warning", "กรุณาเลือกสินค้า!")
+        return
+
+    item_data = tree.item(selected_item)['values']
+    p_id = item_data[0] # อันนี้คือค่า product_id จากแถวที่เลือก
+
+    if messagebox.askyesno("Confirm", f"จะลบ {item_data[1]} ใช่หรือไม่?"):
+        try:
+            conn = get_connection()
+            with conn.cursor() as cursor:
+                # เปลี่ยนจาก id = %s เป็น product_id = %s
+                cursor.execute("DELETE FROM inventory WHERE product_id = %s", (p_id,))
+            conn.commit()
+            conn.close()
+            load_data()
+            messagebox.showinfo("Success", "ลบเรียบร้อย!")
+        except Exception as e:
+            messagebox.showerror("Error", f"ลบไม่ได้: {e}")      
+
 # --- สร้างหน้าต่าง (GUI) ---
 
 root = tk.Tk()
 root.title("ระบบคลังสินค้า LF")
-root.geometry("400x400")
+root.geometry("600x850")
+root.configure(bg="#f4f7f6")
 
-# ส่วนรับข้อมูล
+try:
+    icon_img = tk.PhotoImage(file="favicon.ico")
+    root.iconphoto(False, icon_img)
+except:
+    pass
+
+try:       
+        img = Image.open("fac.jpg")
+        img = img.resize((80, 80)) # ปรับขนาด
+        logo_img = ImageTk.PhotoImage(img)
+
+        tk.Label(root, image=logo_img, bg="#f8f9fa").pack(pady=5)
+except:
+        tk.Label(root, text="🏢", font=("Arial", 30), bg="#f8f9fa").pack()
+tk.Label(root, text="FACTORY INVENTORY", font=("Arial", 18, "bold"), bg="#f8f9fa", fg="#333").pack()
+
 tk.Label(root, text="📦 ระบบจัดการคลังสินค้า", font=("Arial", 16, "bold")).pack(pady=20)
 
-tk.Label(root, text="ชื่อสินค้า:").pack()
-entry_name = tk.Entry(root, width=30)
-entry_name.pack(pady=5)
+# ส่วนรับข้อมูล
 
-tk.Label(root, text="จำนวน:").pack()
-entry_qty = tk.Entry(root, width=30)
-entry_qty.pack(pady=5)
+input_frame = tk.LabelFrame(root, text=" 📝 ข้อมูลสินค้าใหม่ ", font=("Helvetica", 10, "bold"), padx=15, pady=15, bg="white", fg="#34495e", relief="flat", highlightbackground="#dcdde1", highlightthickness=1)
+input_frame.pack(pady=10, padx=25, fill="x")
 
-tk.Label(root, text="ราคา:").pack()
-entry_price = tk.Entry(root, width=30)
-entry_price.pack(pady=5)
+# ปรับ Font และสีสำหรับ Label และ Entry
+label_font = ("Helvetica", 10)
+entry_font = ("Helvetica", 10)
+fg_color = "#2c3e50"
 
-tk.Label(root, text="ประเภทสินค้า:").pack()
+# กำหนด Grid Layout สำหรับ Input
+tk.Label(input_frame, text="ชื่อสินค้า:", font=label_font, bg="white", fg=fg_color).grid(row=0, column=0, sticky="w", pady=8, padx=5)
+entry_name = tk.Entry(input_frame, width=25, font=entry_font, relief="solid", highlightthickness=1, highlightbackground="#dcdde1")
+entry_name.grid(row=0, column=1, pady=8, padx=5)
 
-categories = ["Food", "Beverage", "Household", "Personal Care","Snack"]
-selected_category = tk.StringVar()
-selected_category.set("Select Category")
+tk.Label(input_frame, text="จำนวน:", font=label_font, bg="white", fg=fg_color).grid(row=1, column=0, sticky="w", pady=8, padx=5)
+entry_qty = tk.Entry(input_frame, width=25, font=entry_font, relief="solid", highlightthickness=1, highlightbackground="#dcdde1")
+entry_qty.grid(row=1, column=1, pady=8, padx=5)
 
-dropdown = tk.OptionMenu(root, selected_category, *categories)
-dropdown.config(width=25)
-dropdown.pack(pady=5)
+tk.Label(input_frame, text="ราคา (บาท):", font=label_font, bg="white", fg=fg_color).grid(row=2, column=0, sticky="w", pady=8, padx=5)
+entry_price = tk.Entry(input_frame, width=25, font=entry_font, relief="solid", highlightthickness=1, highlightbackground="#dcdde1")
+entry_price.grid(row=2, column=1, pady=8, padx=5)
 
-# ปุ่มกด
-tk.Button(root, text="เพิ่มสินค้า", command=add_product, bg="blue", fg="white", width=20).pack(pady=20)
+tk.Label(input_frame, text="ประเภท:", font=label_font, bg="white", fg=fg_color).grid(row=3, column=0, sticky="w", pady=8, padx=5)
+categories = ["Food", "Beverage", "Household", "Personal Care", "Snack"]
+selected_category = tk.StringVar(value="Select Category")
+dropdown = tk.OptionMenu(input_frame, selected_category, *categories)
+dropdown.config(width=21, font=entry_font, bg="white", relief="solid")
+dropdown.grid(row=3, column=1, pady=8, padx=5)
 
+
+# --- 3. ส่วนปุ่มกด (Action Buttons - Grid and Space) ---
+btn_frame = tk.Frame(root, bg="#f4f7f6")
+btn_frame.pack(pady=20)
+
+# กำหนดสไตล์ปุ่มแบบ 
+btn_font = ("Helvetica", 10, "bold")
+
+# ปุ่มเพิ่มสินค้า 
+btn_add = tk.Button(btn_frame, text="📥 เพิ่มสินค้า", command=add_product, bg="#3498db", fg="white", font=btn_font, width=15, relief="flat", activebackground="#2980b9", activeforeground="white")
+btn_add.grid(row=0, column=0, padx=10)
+
+# ปุ่มดูสรุปผล 
+btn_sum = tk.Button(btn_frame, text="📊 ดูสรุปผล", command=show_summary, bg="#2ecc71", fg="white", font=btn_font, width=15, relief="flat", activebackground="#27ae60", activeforeground="white")
+btn_sum.grid(row=0, column=1, padx=10)
+
+# ปุ่มลบข้อมูล 
+btn_del = tk.Button(root, text="🗑️ ลบสินค้าที่เลือก", command=delete_product, bg="#e74c3c", fg="white", font=btn_font, width=33, relief="flat", activebackground="#c0392b", activeforeground="white")
+btn_del.pack(pady=(0, 15))
+
+
+--- 4. ส่วนตารางข้อมูล (Improved Treeview) ---
+columns = ("ID", "Name", "Qty", "Price", "Category")
+tree = ttk.Treeview(root, columns=columns, show="headings", height=12)
+
+# กำหนดสไตล์สำหรับ Treeview 
+style = ttk.Style()
+style.theme_use("clam") # ใช้ Theme clam เพื่อการปรับแต่งที่ดีที่สุด
+style.configure("Treeview.Heading", font=("Helvetica", 10, "bold"), background="#dcdde1", foreground="#2c3e50")
+style.configure("Treeview", font=("Helvetica", 10), rowheight=28) # ขยายความสูงแถว
+style.map("Treeview", background=[('selected', '#3498db')]) # สีเมื่อเลือกแถว
+
+# ตั้งหัวตารางและกำหนดความกว้าง
+tree.heading("ID", text="ID", anchor="center")
+tree.heading("Name", text="Name", anchor="w")
+tree.heading("Qty", text="Qty", anchor="center")
+tree.heading("Price", text="Price", anchor="e")
+tree.heading("Category", text="Category", anchor="w")
+
+tree.column("ID", width=40, anchor="center")
+tree.column("Name", width=150, anchor="w")
+tree.column("Qty", width=60, anchor="center")
+tree.column("Price", width=90, anchor="e")
+tree.column("Category", width=120, anchor="w")
+
+
+scrollbar = ttk.Scrollbar(root, orient="vertical", command=tree.yview)
+tree.configure(yscrollcommand=scrollbar.set)
+tree.pack(pady=10, padx=25, fill="both", expand=True) # ให้ตารางขยายได้
+scrollbar.pack(side="right", fill="y")
+
+load_data()
 root.mainloop()
