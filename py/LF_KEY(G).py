@@ -15,10 +15,10 @@ def resource_path(relative_path):
  
 def get_connection():
     return pymysql.connect(
-        host='localhost',
-        user='root',
-        password='56472000sql',
-        db='lfgoon' 
+        host='Yourhost',
+        user='YourUsername',
+        password='ํYourPassword',
+        db='Yourdatabase' 
     )
  
 def add_product():
